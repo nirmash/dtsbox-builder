@@ -191,7 +191,12 @@ filename. So you can't just rename `square_one.py` to `square_one.real.py` — b
 import and dtsbox would error with `Duplicate Python activity name`. The fix is to **move the real
 file out of `activities/` entirely** while smoke-testing.
 
-Steps (use the actual activity name from Step 7 in place of `<activity_name>`):
+**Important — multi-activity patterns.** Chaining and sub-orchestrations both produce **multiple**
+activity files. You must move EACH real activity out and write a stub for EACH one. Skipping any
+will produce a "Duplicate Python activity name" error (if mixed with stubs) or an Azure failure
+(if a real activity gets called).
+
+Steps (use the actual activity name(s) from Step 7 in place of `<activity_name>`):
 
 ```bash
 # 1. Park the real activity outside activities/ so discovery doesn't pick it up
@@ -218,15 +223,21 @@ dtsbox worker > /tmp/dtsbox-worker.log 2>&1 &
 # 5. Invoke the workflow
 dtsbox run <orchestrator_name> --input '<json-payload>'
 
-# 6. Capture the printed instance ID, then wait a moment and view results
+# 6. Capture the printed instance ID, then wait a moment and view results.
+# For multi-step patterns (chaining, sub-orch), prefer --json — the default
+# "N activities" line counts return values, not steps, and shows "1 activities"
+# for a chain. The JSON view shows every step's actual output.
 dtsbox logs <instance-id>
+dtsbox logs <instance-id> --json  # full structured output, recommended for chains
 ```
 
-When done, restore the real activity and remove the stub:
+When done, restore the real activities and remove the stubs:
 
 ```bash
+# For each activity you stubbed:
 rm activities/<activity_name>.py
 mv .smoke-backup/<activity_name>.py activities/
+# Once all are restored:
 rmdir .smoke-backup
 # stop the worker (find pid with `pgrep -f "dtsbox worker"` and `kill <pid>`)
 ```

@@ -118,6 +118,50 @@ For a JSON-shaped initial payload:
 dtsbox run <orchestrator_name> --input '{"url": "https://example.com", "format": "json"}'
 ```
 
+### Smoke-test stub for chaining (no Azure)
+
+For local smoke testing (SKILL.md Step 9 path A), each activity needs its own stub. The key
+constraint: **the stub must return the same dict shape `run_sandbox_step` returns** so the next
+step's `input_data["stdout"]` access works.
+
+Worked example (`5 → double → +10 → format`):
+
+```python
+# activities/double_it.py
+import dtsbox
+
+@dtsbox.activity
+def double_it(ctx, input_data):
+    n = int(input_data)                       # first step gets the raw workflow input
+    return {"stdout": str(n * 2), "sandbox_id": "local-smoke", "elapsed_seconds": 0.0}
+```
+
+```python
+# activities/add_ten.py
+import dtsbox
+
+@dtsbox.activity
+def add_ten(ctx, input_data):
+    n = int(input_data["stdout"])             # later steps unwrap previous step's dict
+    return {"stdout": str(n + 10), "sandbox_id": "local-smoke", "elapsed_seconds": 0.0}
+```
+
+```python
+# activities/format_report.py
+import dtsbox
+
+@dtsbox.activity
+def format_report(ctx, input_data):
+    n = int(input_data["stdout"])
+    return {"stdout": f"Final: {n}", "sandbox_id": "local-smoke", "elapsed_seconds": 0.0}
+```
+
+Verify with: `dtsbox run process_pipeline --input '5'` then `dtsbox logs <id> --json` →
+`step_1.stdout == "10"`, `step_2.stdout == "20"`, `step_3.stdout == "Final: 20"`.
+
+Note: `dtsbox logs <id>` (no `--json`) shows "1 activities" for chains — that's the orchestrator's
+single return value, not the step count. Always use `--json` to see per-step output.
+
 ## What to explain in Step 10
 
 > Your orchestrator ran 3 sequential activities. Each one's output was passed as input to the next.
