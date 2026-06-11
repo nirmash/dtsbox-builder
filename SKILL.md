@@ -28,15 +28,36 @@ user a clear install instruction and stop.
 ```bash
 dtsbox --version       # If "command not found": pip install dtsbox
 python3 --version      # If missing: install Python 3.12+
+docker --version       # Required for the local DTS emulator
 ```
 
 **Do NOT auto-detect or auto-install dtsbox.** If `dtsbox --version` fails, tell the user:
 > The `dtsbox` CLI isn't on your PATH. Install it with `pip install dtsbox`, then re-run me.
 
-For the local emulator, run `scripts/check-emulator.sh` from this skill's directory (if available).
-If the emulator isn't installed, instruct the user:
-> The DTS local emulator isn't running. Install it with `pip install <emulator-package>` and start
-> it before we test locally. We can still scaffold the project without it.
+For the local DTS emulator, run `scripts/check-emulator.sh` from this skill's directory. The
+emulator is a Docker container (`mcr.microsoft.com/dts/dts-emulator:latest`) — **not** a pip
+package. If it's not running, give the user the exact command:
+> The DTS local emulator isn't running. Start it with:
+> ```bash
+> docker run -d --name dtsbox-emulator -p 8080:8080 mcr.microsoft.com/dts/dts-emulator:latest
+> ```
+> First run pulls the image (~30-45s). We can scaffold the project without it; you'll need it for
+> the local test step.
+
+### Important: what "local" actually means
+
+The local DTS emulator hosts the **scheduler** only. Sandbox execution (`dtsbox.run_sandbox_step`)
+always requires real Azure Container Apps SandboxGroups — there is no local sandbox runtime today.
+That means:
+
+- ✅ **Locally with emulator only:** orchestrator/activity registration, DTS round-trip, workflows
+  that DON'T call `run_sandbox_step` (pure-Python compute).
+- ❌ **Requires `dtsbox setup` first:** any workflow that calls `run_sandbox_step` (which is what
+  the scaffolded fan-out, chaining, and sub-orchestrations templates all do).
+
+Be honest about this in Step 9. If the user wants true end-to-end local testing without Azure, the
+options are: (a) write an activity that doesn't call `run_sandbox_step` for smoke testing, or (b)
+run `dtsbox setup` first and accept the Azure costs.
 
 ## The 12-Step Conversation
 
@@ -143,34 +164,98 @@ add the new source per `reference/yaml-schema.md`. If the user mentioned externa
 
 ### Step 9 — Local test (always prompt)
 
-Say:
-> Ready to test locally? I'll start the worker in one terminal and run the workflow in another.
-> This requires the DTS emulator to be running (run `scripts/check-emulator.sh` if you're unsure).
-> Proceed? [yes/no]
+**Decision point first.** Because the generated activity calls `run_sandbox_step` (which needs
+Azure ACA), pure local testing will FAIL with `subscription_id is required`. Tell the user:
 
-If yes, run:
+> Two ways to test from here:
+>
+> **A. Local smoke test (DTS only, no sandbox).** I'll temporarily replace the activity with a
+> pure-Python stub that doesn't call `run_sandbox_step`. This proves the orchestrator/activity
+> wiring works end-to-end against the local emulator. Useful for catching shape mistakes early.
+> No Azure cost.
+>
+> **B. Full Azure test.** Skip ahead to Step 11 — run `dtsbox setup` (one-time, ~10 minutes,
+> ~$50/month idle), then `dtsbox publish`, then `dtsbox run`. This exercises the real sandbox.
+> Azure billing applies.
+>
+> Which one? [A / B / skip]
+
+#### If A — Local smoke test
+
+First confirm the emulator is up by running `scripts/check-emulator.sh`. If not, tell the user the
+exact `docker run` command from the prereqs section.
+
+**Important — discovery quirk.** `dtsbox` discovery imports every `.py` file under `activities/`
+and registers every function decorated with `@dtsbox.activity` by its **function name**, not by
+filename. So you can't just rename `square_one.py` to `square_one.real.py` — both files would
+import and dtsbox would error with `Duplicate Python activity name`. The fix is to **move the real
+file out of `activities/` entirely** while smoke-testing.
+
+Steps (use the actual activity name from Step 7 in place of `<activity_name>`):
 
 ```bash
-# Terminal 1 (background process)
-dtsbox worker
-```
+# 1. Park the real activity outside activities/ so discovery doesn't pick it up
+mkdir -p .smoke-backup
+mv activities/<activity_name>.py .smoke-backup/
 
-Wait a few seconds for the worker to register, then in another shell run:
+# 2. Write a stub in its place. Same function name, plain Python, same return shape.
+cat > activities/<activity_name>.py <<'PY'
+import dtsbox
 
-```bash
+@dtsbox.activity
+def <activity_name>(ctx, item):
+    # SMOKE-TEST STUB — same shape as run_sandbox_step would return,
+    # but in pure Python so it runs against the local emulator without Azure.
+    return {"stdout": f"smoke({item})", "sandbox_id": "local-smoke", "elapsed_seconds": 0.0}
+PY
+
+# 3. Clear stale bytecode (otherwise discovery may load cached registrations)
+rm -rf activities/__pycache__ orchestrators/__pycache__
+
+# 4. Start the worker in the background, wait ~3-5s for registration
+dtsbox worker > /tmp/dtsbox-worker.log 2>&1 &
+
+# 5. Invoke the workflow
 dtsbox run <orchestrator_name> --input '<json-payload>'
+
+# 6. Capture the printed instance ID, then wait a moment and view results
+dtsbox logs <instance-id>
 ```
 
-Construct the input from the user's Step 3 answers. For fan-out, that's a list. For chaining, an
-object. For sub-orchestrations, the parent's payload.
+When done, restore the real activity and remove the stub:
+
+```bash
+rm activities/<activity_name>.py
+mv .smoke-backup/<activity_name>.py activities/
+rmdir .smoke-backup
+# stop the worker (find pid with `pgrep -f "dtsbox worker"` and `kill <pid>`)
+```
+
+#### If B — Full Azure test
+
+Skip to Step 11. Don't try to run anything locally — it will fail with `subscription_id is
+required` because `run_sandbox_step` always calls into Azure.
+
+#### If skip
+
+Move to Step 12 (summary). The user can test later.
 
 ### Step 10 — Explain results
 
-When the workflow completes, show the output and explain what happened in 4 sentences:
-> The orchestrator scheduled N activities. DTS dispatched each to the worker, which booted a fresh
-> sandbox per activity, ran your command, captured stdout, and deleted the sandbox. Results came
-> back as a list of `{stdout, sandbox_id, elapsed_seconds}` dicts. You can re-query the run with
-> `dtsbox logs <instance-id>`.
+When the workflow completes, show the output and explain what happened.
+
+**If path A (smoke test):**
+> Your orchestrator scheduled N activities; DTS dispatched each to the worker, which executed the
+> stub in-process and returned. The orchestrator/activity wiring is correct — the same flow will
+> work against real sandboxes once you do `dtsbox setup` + `dtsbox publish`. Results came back as
+> a list with the same shape `run_sandbox_step` would return (`stdout`, `sandbox_id`,
+> `elapsed_seconds`). Inspect the run with `dtsbox logs <instance-id>`.
+
+**If path B (Azure):**
+> Your orchestrator scheduled N activities. DTS dispatched each to the worker, which booted a
+> fresh ACA sandbox per activity, ran your command, captured stdout, and deleted the sandbox.
+> Results came back as a list of `{stdout, sandbox_id, elapsed_seconds}` dicts. Inspect the run
+> with `dtsbox logs <instance-id> --json`.
 
 ### Step 11 — Azure deploy (always prompt — this costs money)
 

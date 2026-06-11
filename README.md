@@ -35,11 +35,17 @@ Four patterns coming in v2:
 Before invoking the skill, install:
 
 - [`dtsbox`](https://github.com/nirmash/dts-sandbox-poc) — `pip install dtsbox`
-- DTS local emulator — `pip install durabletask-emulator` (exact package name may vary; the skill
-  will tell you if it can't find it)
+- DTS local emulator — a Docker container (NOT a pip package):
+  ```bash
+  docker run -d --name dtsbox-emulator -p 8080:8080 mcr.microsoft.com/dts/dts-emulator:latest
+  ```
+  Requires Docker Desktop (macOS/Windows) or Docker Engine (Linux).
 - [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli)
 - Python 3.12+
-- For Azure deploy: Azure CLI (`az`), an active subscription, and `az login`
+- For full end-to-end runs (including sandbox execution): Azure CLI (`az`), an active subscription,
+  and `az login` — `dtsbox.run_sandbox_step` always requires real Azure Container Apps
+  SandboxGroups; there is no local sandbox runtime today. The skill offers a smoke-test path that
+  stubs out sandbox calls so you can validate orchestration locally without Azure.
 
 The skill checks these at the start and gives you clear install instructions if anything is missing.
 It does **not** install anything for you.

@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# check-emulator.sh — Detect whether the DTS local emulator is installed and running.
+# check-emulator.sh — Detect whether the DTS local emulator (Docker) is installed and running.
+#
+# The DTS emulator is a Docker image: mcr.microsoft.com/dts/dts-emulator:latest
+# It is NOT a pip package — there is no native binary distribution.
 #
 # Used by the dtsbox-builder skill before Step 9 (local test). Exit codes:
-#   0  — emulator is running and reachable on http://localhost:8080
-#   1  — emulator binary is installed but not running
-#   2  — emulator is not installed (pip package missing)
+#   0  — emulator container is running and reachable on http://localhost:8080
+#   1  — Docker is installed but no emulator container is running
+#   2  — Docker is not installed or not running
 #
-# This script does not install or start anything. It only reports state.
+# This script does NOT start or install anything. It only reports state.
 
 set -u
 
 ENDPOINT="${DTS_EMULATOR_ENDPOINT:-http://localhost:8080}"
+EMULATOR_IMAGE="mcr.microsoft.com/dts/dts-emulator:latest"
 
-# Check 1 — is the emulator reachable?
+# Check 1 — emulator reachable on the expected port?
+# DTS speaks gRPC, so a plain HTTP GET returns 400/404/405 — any of those means "port open, gRPC server listening".
 if command -v curl >/dev/null 2>&1; then
     if curl --silent --max-time 2 --output /dev/null --write-out "%{http_code}" "${ENDPOINT}" \
         | grep -qE '^(200|400|404|405)$'; then
@@ -21,43 +26,45 @@ if command -v curl >/dev/null 2>&1; then
     fi
 fi
 
-# Check 2 — is the emulator package installed via pip?
-EMULATOR_PKG_CANDIDATES=(
-    "durabletask-emulator"
-    "durable-task-emulator"
-    "dts-emulator"
-)
-INSTALLED=""
-for pkg in "${EMULATOR_PKG_CANDIDATES[@]}"; do
-    if python3 -m pip show "${pkg}" >/dev/null 2>&1; then
-        INSTALLED="${pkg}"
-        break
-    fi
-done
+# Check 2 — is Docker available?
+if ! command -v docker >/dev/null 2>&1; then
+    cat <<'EOF' >&2
+not-installed: Docker is required to run the DTS emulator.
 
-if [[ -n "${INSTALLED}" ]]; then
-    cat <<EOF >&2
-not-running: DTS emulator package '${INSTALLED}' is installed but no emulator is reachable at ${ENDPOINT}.
+Install Docker Desktop (macOS/Windows) or Docker Engine (Linux):
+  https://docs.docker.com/get-docker/
 
-Start the emulator in a separate terminal (typical commands):
-  ${INSTALLED}
-  # or
-  python3 -m ${INSTALLED//-/_}
+Then start the emulator with:
+  docker run -d --name dtsbox-emulator -p 8080:8080 mcr.microsoft.com/dts/dts-emulator:latest
+
+And re-run this check.
+EOF
+    exit 2
+fi
+
+if ! docker info >/dev/null 2>&1; then
+    cat <<'EOF' >&2
+not-installed: Docker is installed but the daemon is not running.
+
+Start Docker Desktop (macOS/Windows) or run `sudo systemctl start docker` (Linux),
+then start the emulator with:
+  docker run -d --name dtsbox-emulator -p 8080:8080 mcr.microsoft.com/dts/dts-emulator:latest
+
+And re-run this check.
+EOF
+    exit 2
+fi
+
+# Check 3 — Docker is available but no container is responding. Tell the user how to start one.
+cat <<EOF >&2
+not-running: Docker is installed but no DTS emulator is reachable at ${ENDPOINT}.
+
+Start the emulator container (it will pull the image on first run, ~30-45s):
+  docker run -d --name dtsbox-emulator -p 8080:8080 ${EMULATOR_IMAGE}
+
+If a previous container is stuck, remove it first:
+  docker rm -f dtsbox-emulator
 
 Then re-run this check.
 EOF
-    exit 1
-fi
-
-cat <<'EOF' >&2
-not-installed: DTS emulator is not installed.
-
-Install via pip:
-  pip install durabletask-emulator
-
-(If that package name fails, ask the user which emulator distribution they use — the dtsbox docs
-will eventually pin the exact package name. The skill should not auto-install.)
-
-Then start it in a separate terminal and re-run this check.
-EOF
-exit 2
+exit 1
