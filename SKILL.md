@@ -101,6 +101,10 @@ directory. That playbook tells you the exact questions to ask and the exact code
 - Pattern 2 → `patterns/chaining.md`
 - Pattern 3 → `patterns/sub-orchestrations.md`
 
+For each pattern there's also a complete, dogfood-verified reference project under `examples/`
+(`square_numbers/`, `pipeline_demo/`, `batch_processor/`). If the user wants to see working code
+before customizing their own, point them there.
+
 ### Step 3 — Gather intent
 
 Use the pattern playbook to ask 2-3 focused questions. Don't ask everything at once. Examples:

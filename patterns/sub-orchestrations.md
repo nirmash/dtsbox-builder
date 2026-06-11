@@ -80,18 +80,33 @@ def <child_name>(ctx, input_item):
 ```python
 """Activity used by child orchestrator(s). Side effects allowed; runs once per scheduled task."""
 import dtsbox
+from durabletask import task
 
 
+# Local smoke stub — runs against the Docker emulator with zero Azure setup.
+# Return shape MUST match run_sandbox_step's output so swapping to Azure is a 1-line change.
 @dtsbox.activity
-def <child_activity>(ctx, item):
-    return dtsbox.run_sandbox_step(
-        ctx,
-        source="python-3.12",
-        files={"/tmp/work.py": f"print({item!r})"},
-        command="python3 /tmp/work.py",
-        workflow="<child_name>",
-    )
+def <child_activity>(ctx: task.ActivityContext, item) -> dict:
+    result = f"processed:{item}"
+    return {"stdout": result, "sandbox_id": "local-smoke", "elapsed_seconds": 0.0}
+
+
+# Real Azure version (uncomment after `dtsbox setup` + comment out the stub above):
+# @dtsbox.activity
+# def <child_activity>(ctx: task.ActivityContext, item):
+#     return dtsbox.run_sandbox_step(
+#         ctx,
+#         source="python-3.12",
+#         files={"/tmp/work.py": f"print({item!r})"},
+#         command="python3 /tmp/work.py",
+#         workflow="<child_name>",
+#     )
 ```
+
+> **Multi-activity / multi-orchestrator note**: every `@dtsbox.activity` and every
+> `@dtsbox.orchestrator` in the project runs through the worker. If any activity touches
+> `run_sandbox_step` without Azure configured, the orchestration will fail on that step.
+> Smoke-stub every activity for local testing, then swap to the Azure path together.
 
 ## The key API: `ctx.call_sub_orchestrator(...)`
 
@@ -131,8 +146,31 @@ dtsbox run <parent_name> --input '["customer-001", "customer-002", "customer-003
 > Your parent orchestrator scheduled 3 child sub-orchestrations via
 > `ctx.call_sub_orchestrator(...)`. Each child got its own instance ID and ran as a fully
 > independent durable workflow — own history, own retries, own replay. The parent collected each
-> child's return value and aggregated them. You can see all instances (parent + children) in
-> `dtsbox ps`, and `dtsbox logs <child-instance-id>` lets you drill into any child's run.
+> child's return value and aggregated them.
+>
+> **Inspecting children**: child instance IDs follow the pattern `<parent-id>:0001`, `:0002`, etc.
+> Drill into any child with `dtsbox logs <parent-id>:0001 --json`. Note that `dtsbox ps` only
+> shows ACTIVE instances — once a child completes, it disappears from `ps` but its logs remain
+> accessible by ID.
+>
+> **Default logs view caveat**: `dtsbox logs <parent-id>` (without `--json`) shows the parent's
+> child-orchestrator returns as "activities". If your children return dicts that don't have a
+> `stdout` key, the default view will display `(empty)` for each — that does NOT mean they failed.
+> Always use `--json` for sub-orchestration parents to see the real return values.
+
+## Worked smoke-test example
+
+A verified end-to-end example lives at `examples/batch_processor/` in this repo. Parent dispatches
+one child per group; each child fan-outs over its group's numbers and squares them. Run with the
+Docker emulator:
+
+```bash
+cd examples/batch_processor
+dtsbox worker &
+dtsbox run batch_processor --input '[[1,2,3],[4,5],[6,7,8,9]]'
+dtsbox logs <instance-id> --json
+# → [{"group_id": 0, "results": [1,4,9]}, {"group_id": 1, "results": [16,25]}, ...]
+```
 
 ## Edge cases to mention
 
