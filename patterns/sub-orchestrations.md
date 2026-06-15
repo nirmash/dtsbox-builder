@@ -21,10 +21,24 @@ durable workflow with its own history, retry, and replay semantics.
 
 ## Code to generate (Step 7)
 
-Replace the default fan-out files with:
-- One parent orchestrator
-- One or more child orchestrators
-- One activity per child step (children typically follow fan-out or chaining internally)
+**Preferred path: use the scaffolders.** They emit the same templates as below, validated and
+with `worker.py` auto-refreshed:
+
+```bash
+dtsbox add orchestrator <parent_name> --pattern sub-orch
+dtsbox add orchestrator <child_name> --pattern fan-out   # or chaining/plain
+dtsbox add activity <child_activity>
+```
+
+Then in the parent, replace `CHANGEME_child_orchestrator` with the actual child name. In the
+child, replace `CHANGEME_activity` with the activity name. Fill in the activity body from the
+user's intent.
+
+Replace the default fan-out files (`orchestrators/example_fan_out.py`,
+`activities/example_activity.py`) once the user has named their own.
+
+The full templates below are kept as a fallback / reference for when you need to write or edit
+them by hand.
 
 ### `orchestrators/<parent_name>.py` — fan-out parent
 

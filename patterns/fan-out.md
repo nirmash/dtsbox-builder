@@ -19,9 +19,23 @@ Process N items in parallel, collect results.
 
 ## Code to generate (Step 7)
 
-Replace the default `orchestrators/example_fan_out.py` and `activities/example_activity.py` with
-files named after the user's intent. Suggest names like `process_urls` / `fetch_url_title` or
+**Preferred path: use the scaffolders.** They emit the same templates as below, validated and
+with `worker.py` auto-refreshed:
+
+```bash
+dtsbox add orchestrator <orchestrator_name> --pattern fan-out
+dtsbox add activity <activity_name>
+```
+
+Then replace the `CHANGEME_activity` placeholder in the orchestrator with the activity name,
+and fill in the activity body (`files=`, `command=`) from the user's intent.
+
+Delete the default `orchestrators/example_fan_out.py` and `activities/example_activity.py` once
+the user has named their own. Suggest names like `process_urls` / `fetch_url_title` or
 `analyze_images` / `analyze_one_image`.
+
+The full templates below are kept as a fallback / reference for when you need to write or edit
+them by hand.
 
 ### `orchestrators/<orchestrator_name>.py`
 

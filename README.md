@@ -13,7 +13,8 @@ When you type `/dtsbox-builder` in Copilot CLI, the skill:
 1. Asks you which Durable Task pattern fits your use case (fan-out, chaining, or sub-orchestrations)
 2. Asks 2-3 focused questions about what each step or branch does
 3. Runs `dtsbox init <name>` to scaffold a new project
-4. Customizes the scaffolded orchestrator and activity files using your answers
+4. Uses `dtsbox add activity <name>` and `dtsbox add orchestrator <name> --pattern …` to
+   generate the right templates, then customizes them with your answers
 5. Walks you through testing it locally against the DTS emulator
 6. Optionally walks you through deploying to Azure (always asks before any command that costs money)
 

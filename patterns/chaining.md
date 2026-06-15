@@ -20,12 +20,28 @@ Sequential pipeline — step1 produces an output, step2 consumes it, step3 consu
 
 ## Code to generate (Step 7)
 
-Replace the default fan-out files with:
-- One orchestrator file
-- One activity file per step
+**Preferred path: use the scaffolders.** They emit the same templates as below, validated and
+with `worker.py` auto-refreshed:
+
+```bash
+dtsbox add orchestrator <orchestrator_name> --pattern chaining
+dtsbox add activity <step_1_activity>
+dtsbox add activity <step_2_activity>
+dtsbox add activity <step_3_activity>   # one per step
+```
+
+Then in the orchestrator, replace the `CHANGEME_step1` / `CHANGEME_step2` / `CHANGEME_step3`
+placeholders with the actual activity names, and fill in each activity's body from the user's
+intent.
+
+Replace the default fan-out files (`orchestrators/example_fan_out.py`,
+`activities/example_activity.py`) once the user has named their own.
 
 Suggest naming the orchestrator after the pipeline (`process_pipeline`, `nightly_etl`) and each
 activity after its step (`download_file`, `transform_data`, `upload_result`).
+
+The full templates below are kept as a fallback / reference for when you need to write or edit
+them by hand.
 
 ### `orchestrators/<orchestrator_name>.py`
 

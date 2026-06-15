@@ -149,16 +149,34 @@ list what was scaffolded:
 
 ### Step 7 — Customize the orchestrator and activity
 
-This is the main code-generation step. The pattern playbook tells you the exact files to write
-and the exact template to fill in. **The user's answers from Step 3 fill in the variable parts.**
+This is the main code-generation step. **Prefer the built-in scaffolders** over hand-writing files
+— they validate names, create parent packages if missing, and re-render `worker.py` for you:
+
+```bash
+dtsbox add orchestrator <name> --pattern {fan-out|chaining|sub-orch|plain}
+dtsbox add activity <name>           # default: includes run_sandbox_step
+dtsbox add activity <name> --plain   # plain Python body (no sandbox call)
+```
+
+Then open the generated files and replace the `CHANGEME_*` placeholders + activity body with
+the user's actual logic from Step 3. The pattern playbook describes exactly what each
+placeholder represents.
 
 For example, in a fan-out for "fetch a URL and extract text":
-- Write `orchestrators/url_processor.py` based on the fan-out template
-- Write `activities/fetch_and_extract.py` filling in the user's command and files
-- Delete the default `orchestrators/example_fan_out.py` and `activities/example_activity.py`
-  (or rename them if the user wants to keep them as reference)
+
+1. Run `dtsbox add orchestrator url_processor --pattern fan-out`
+2. Run `dtsbox add activity fetch_and_extract`
+3. In `orchestrators/url_processor.py`, replace `CHANGEME_activity` with `fetch_and_extract`
+4. In `activities/fetch_and_extract.py`, fill in the user's `files=` and `command=` (the
+   template already wires `run_sandbox_step` for you)
+5. Delete the default `orchestrators/example_fan_out.py` and `activities/example_activity.py`
+   (or rename them if the user wants to keep them as reference)
 
 As you write each file, **explain in one sentence what it does**. Don't lecture — narrate.
+
+> **Why not hand-write?** Scaffolders refuse to overwrite, catch typos in identifier names,
+> and update `worker.py` automatically. Only hand-write when the user has a special template
+> need that none of the four patterns covers.
 
 ### Step 8 — Wire up `dtsbox.yaml`
 

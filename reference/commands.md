@@ -10,6 +10,28 @@ Scaffolds a new project directory with `orchestrators/`, `activities/`, `workflo
 - Safe to auto-execute.
 - Fails if `<name>` already exists.
 
+### `dtsbox add activity <name> [--plain]`
+Scaffolds a new file at `activities/<name>.py` with the `@dtsbox.activity` decorator and
+function stub. Re-renders `worker.py` so the new symbol is registered automatically.
+- Default template includes a `dtsbox.run_sandbox_step(...)` call (the common case).
+- `--plain` emits a plain Python body instead (use when you don't need a sandbox).
+- Refuses to overwrite an existing file.
+- Validates `<name>` is a snake_case Python identifier.
+- Safe to auto-execute.
+
+### `dtsbox add orchestrator <name> --pattern {fan-out|chaining|sub-orch|plain}`
+Scaffolds a new file at `orchestrators/<name>.py` from one of four templates. Re-renders
+`worker.py` so the new symbol is registered automatically.
+- Patterns:
+  - `fan-out` (default) — `task.when_all([ctx.call_activity(...) for ...])`
+  - `chaining` — sequential `yield ctx.call_activity(...)` chain
+  - `sub-orch` — `task.when_all([ctx.call_sub_orchestrator(...) ...])`
+  - `plain` — single `yield ctx.call_activity(...)`
+- Templates use `CHANGEME_*` placeholders the skill must replace with real activity names.
+- Refuses to overwrite an existing file.
+- Validates `<name>` is a snake_case Python identifier.
+- Safe to auto-execute.
+
 ### `dtsbox worker`
 Starts the DTS worker in the current project. Auto-discovers `orchestrators/` and `activities/`.
 - Local default: connects to `http://localhost:8080`, taskhub `default` (the emulator).
